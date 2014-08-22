@@ -1,5 +1,6 @@
 package assignment;
 
+import java.awt.geom.Point2D;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -10,6 +11,8 @@ import java.util.List;
 import java.util.Random;
 
 import javax.swing.JTree;
+
+import problem.*;
 
 public class RiverCleaner {
 	
@@ -22,21 +25,37 @@ public class RiverCleaner {
 	
 	
 	public RiverCleaner(String path){
-		asvList = new ArrayList<ASV>();
-		obstacleList = new ArrayList<Obstacle>();
+		ProblemSpec prob = new ProblemSpec();
 		try {
-			readInput(path);
+			prob.loadProblem(path);
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-//		System.out.println(asvList.toString());
-//		System.out.println(getUniformSamples(20000).size());
-//		System.out.println(getSamplesNearObstacles(20000, (float) 0.005).size());
-		List<Node> path2 = findPath(asvList.get(0), 0.01);
-		for (Node n: path2){
-			System.out.println(n.toString() + " " + n.toString() + " " + n.toString());
-		}
+		
+		int numASVs = prob.getInitialState().getASVCount();
+		obstacleList = prob.getObstacles();
+		
+//		asvList = new ArrayList<ASV>();
+//		obstacleList = new ArrayList<Obstacle>();
+//		try {
+//			readInput(path);
+//		} catch (IOException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
+////		System.out.println(asvList.toString());
+////		System.out.println(getUniformSamples(20000).size());
+////		System.out.println(getSamplesNearObstacles(20000, (float) 0.005).size());
+//		List<Node> path2 = findPath(asvList.get(0), 0.01);
+//		for (Node n: path2){
+//			System.out.println(n.toString() + " " + n.toString() + " " + n.toString());
+//		}
+		
+	}
+	
+	
+	
+	private void genStates() {
 		
 	}
 	
@@ -98,43 +117,68 @@ public class RiverCleaner {
 		return nodes;
 	}
 	
-	private Position getUniformSample(){
+	private Point2D getUniformSample(){
 		Random random = new Random();
-		Position sample = new Position(random.nextFloat(), random.nextFloat());
+		Point2D sample = new Point2D.Double(random.nextDouble(), random.nextDouble());
 		while (isColliding(sample)){
-			sample = new Position(random.nextFloat(), random.nextFloat());
+			sample = new Point2D.Double(random.nextDouble(), random.nextDouble());
 		}
 		return sample;
 	}
 	
-	private Position getSampleNearObstacle(double distance){
+	private Point2D getSampleNearObstacle(double distance){
 		Random random = new Random();
-		Position sample = new Position(random.nextFloat(), random.nextFloat());
+		Point2D sample = new Point2D.Double(random.nextDouble(), random.nextDouble());
 		if (isColliding(sample)){
-			if (sample.getX() - distance >= 0 && !isColliding(sample.translateLeft(distance))){
-				return sample.translateLeft(distance);
+			if (sample.getX() - distance >= 0) {
+				sample.setLocation(sample.getX() - distance, sample.getY());
+				if(!isColliding(sample)) {
+					 return sample;
+				}
 			}
-			if (sample.getX() + distance <= 1 && !isColliding(sample.translateRight(distance))){
-				return sample.translateRight(distance);
+			if (sample.getX() + distance <= 1) {
+				sample.setLocation(sample.getX() + distance, sample.getY());
+				if(!isColliding(sample)) {
+					 return sample;
+				}
 			}
-			if (sample.getY() - distance >= 0 && !isColliding(sample.translateUp(distance))){
-				return sample.translateUp(distance);
+			if (sample.getY() - distance >= 0) {
+				sample.setLocation(sample.getX(), sample.getY() - distance);
+				if(!isColliding(sample)) {
+					 return sample;
+				}
 			}
-			if (sample.getY() + distance <= 1 && !isColliding(sample.translateDown(distance))){
-				return sample.translateDown(distance);
+			if (sample.getY() + distance <= 1) {
+				sample.setLocation(sample.getX(), sample.getY() + distance);
+				if(!isColliding(sample)) {
+					 return sample;
+				}
 			}
 		} else {
-			if (sample.getX() - distance >= 0 && isColliding(sample.translateLeft(distance))){
-				return sample.translateLeft(distance);
+			Point2D sample2 = new Point2D.Double(sample.getX(), sample.getY());
+			if (sample.getX() - distance >= 0) {
+				sample.setLocation(sample.getX() - distance, sample.getY());
+				if(isColliding(sample)) {
+					 return sample2;
+				}
 			}
-			if (sample.getX() + distance <= 1 && isColliding(sample.translateRight(distance))){
-				return sample.translateRight(distance);
+			if (sample.getX() + distance <= 1) {
+				sample.setLocation(sample.getX() + distance, sample.getY());
+				if(isColliding(sample)) {
+					 return sample2;
+				}
 			}
-			if (sample.getY() - distance >= 0 && isColliding(sample.translateUp(distance))){
-				return sample.translateUp(distance);
+			if (sample.getY() - distance >= 0) {
+				sample.setLocation(sample.getX(), sample.getY() - distance);
+				if(isColliding(sample)) {
+					 return sample2;
+				}
 			}
-			if (sample.getY() + distance <= 1 && isColliding(sample.translateDown(distance))){
-				return sample.translateDown(distance);
+			if (sample.getY() + distance <= 1) {
+				sample.setLocation(sample.getX(), sample.getY() + distance);
+				if(isColliding(sample)) {
+					 return sample2;
+				}
 			}
 		}
 		//THIS IS PROBABLY TERRIBLE!
@@ -157,9 +201,9 @@ public class RiverCleaner {
 		return samples;
 	}
 	
-	private boolean isColliding(Position position){
+	private boolean isColliding(Point2D position){
 		for (Obstacle obstacle: obstacleList){
-			if(obstacle.inBounds(position)){
+			if(obstacle.getRect().contains(position)){
 				return true;
 			}
 		}

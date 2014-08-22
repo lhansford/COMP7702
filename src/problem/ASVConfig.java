@@ -17,6 +17,13 @@ public class ASVConfig {
 	private List<Point2D> asvPositions = new ArrayList<Point2D>();
 
 	/**
+	 * Constructor taking a list of 2D points representing individual ASV positions
+	 */
+	public ASVConfig(List<Point2D> positions) {
+		this.asvPositions = positions;
+	}
+	
+	/**
 	 * Constructor. Takes an array of 2n x and y coordinates, where n is the
 	 * number of ASVs
 	 *

@@ -1,0 +1,367 @@
+import java.awt.geom.Line2D;
+import java.awt.geom.Point2D;
+import java.util.*;
+
+import problem.*;
+import tester.*;
+
+public class Sampler {
+	private int numASVs;						// The number of ASVs for the problem
+	private double boomLength;					// The length of the booms between ASVs
+	private double minArea;						// The minimum area to meet for a valid configuration
+	private Random random = new Random();		// Used to generate random positions for states
+	private boolean curveClockwise;				// True if generated states should curve clockwise
+	private List<Obstacle> obstacles;
+	
+	private Tester tester = new Tester();
+	
+	public Sampler(int numASVs, double boomLength, double minArea, ASVConfig initial, ASVConfig goal, List<Obstacle> obstacles) {
+		this.numASVs = numASVs;
+		this.minArea = minArea;
+		this.boomLength = boomLength;
+		this.obstacles = obstacles;
+		
+		// Work out the curve orientation of the initial and goal configurations
+		boolean initialCurveClockwise = tester.isConvex(initial);
+		boolean goalCurveClockwise = tester.isConvex(goal);
+		if(initialCurveClockwise && goalCurveClockwise) {
+			curveClockwise = initialCurveClockwise;
+		} else {
+			// Cannot solve?
+			System.err.println("Initial and goal configurations have different curve orientations");
+			System.exit(0);
+		}
+		
+		Point2D p1 = new Point2D.Double(0.1, 0.1);
+		Point2D p2 = new Point2D.Double(0.2, 0.1);
+		Point2D p3 = new Point2D.Double(0.3, 0.2);
+		Point2D p4 = new Point2D.Double(0.3, 0.3);
+		
+		List<Point2D> pos = new ArrayList<Point2D>();
+		pos.add(p1);
+		pos.add(p2);
+		pos.add(p3);
+		pos.add(p4);
+		
+		ASVConfig conf = new ASVConfig(pos);
+		int count = 0;
+		for(int i = 0; i < 100000; i++) {
+			Point2D init = getSampleInPassage(boomLength * 4);
+			while(init == null) { 
+				init = getSampleInPassage(boomLength * 4);
+			}
+			ASVConfig c = generateRandomConfiguration(init);
+			if(isValidConfiguration(c)) {
+//				System.out.println(c);
+				count++;
+//				System.err.println("FOUND!");
+			}
+		}
+		
+		System.out.println(count);
+		
+	}
+	
+	/**
+	 * Generates a random state 
+	 */
+	public ASVConfig generateRandomConfiguration(Point2D initPos) {
+		// List to eventually hold all of the generated ASV positions
+		List<Point2D> positions = new ArrayList<Point2D>();
+		double[] angles = new double[numASVs];
+		
+		positions.add(initPos);
+		
+		// Next generate all of the other ASV positions
+		for(int i = 1; i < numASVs; i++) {
+			/* We need to pick another random (x, y) point that is boomLength distance
+			 * away from the previous point generated
+			 */
+			Point2D previous = positions.get(i - 1);
+
+			// Choose a random angle
+			double angle = Math.random() * (Math.PI * 2);
+			
+			if(i > 1) {
+				if(curveClockwise) {
+					while(angle > angles[i-1] && angle < ((angles[i-1] - Math.PI) + (Math.PI*2)) % Math.PI*2) {
+//						System.out.println(angle + " " + angles[i-1] + " " + ((angles[i-1] - Math.PI) + (Math.PI*2)) % Math.PI*2);
+						angle = Math.random() * (Math.PI * 2);
+					}
+				} else {
+					while(angle < angles[i-1] && angle > ((angles[i-1] + Math.PI) + (Math.PI*2)) % Math.PI*2) {
+//						System.out.println(angle);
+						angle = Math.random() * (Math.PI * 2);
+					}
+				}
+			}
+			
+			angles[i] = angle;
+			
+			// Choose the random points
+			double x = previous.getX() + (Math.cos(angle) * boomLength);
+			double y = previous.getY() + (Math.sin(angle) * boomLength);
+			
+			
+			// Add it to the list
+			positions.add(new Point2D.Double(x, y));
+		}
+		
+		return new ASVConfig(positions);
+	}
+
+	private Point2D getUniformSample(){
+		Random random = new Random();
+		Point2D sample = new Point2D.Double(random.nextDouble(), random.nextDouble());
+		while (isColliding(sample)){
+			sample = new Point2D.Double(random.nextDouble(), random.nextDouble());
+		}
+		return sample;
+	}
+	
+	private Point2D getSampleInPassage(double distance) {
+		// Get q1
+		Random random = new Random();
+		Point2D sample = new Point2D.Double(random.nextDouble(), random.nextDouble());
+		
+		if(isColliding(sample)) {
+			double angle = 0;
+			while(angle < Math.PI*2) {
+				// Choose the random points
+				double x = sample.getX() + (Math.cos(angle) * distance);
+				double y = sample.getY() + (Math.sin(angle) * distance);
+				
+				double midX = Math.abs((sample.getX() + x) / 2);
+				double midY = Math.abs((sample.getY() + y) / 2);
+				
+				if(isColliding(new Point2D.Double(x, y)) && !isColliding(new Point2D.Double(midX, midY))) {
+					// q2 and midpoint collide
+					return new Point2D.Double(midX, midY);
+				}
+				
+				angle += Math.PI/4;
+			}
+		}
+		
+		return null;
+	}
+	
+	private Point2D getSampleNearObstacle(double distance) {
+		Random random = new Random();
+		Point2D sample = new Point2D.Double(random.nextDouble(), random.nextDouble());
+		if (isColliding(sample)){
+			if (sample.getX() - distance >= 0) {
+				sample.setLocation(sample.getX() - distance, sample.getY());
+				if(!isColliding(sample)) {
+					 return sample;
+				}
+			}
+			if (sample.getX() + distance <= 1) {
+				sample.setLocation(sample.getX() + distance, sample.getY());
+				if(!isColliding(sample)) {
+					 return sample;
+				}
+			}
+			if (sample.getY() - distance >= 0) {
+				sample.setLocation(sample.getX(), sample.getY() - distance);
+				if(!isColliding(sample)) {
+					 return sample;
+				}
+			}
+			if (sample.getY() + distance <= 1) {
+				sample.setLocation(sample.getX(), sample.getY() + distance);
+				if(!isColliding(sample)) {
+					 return sample;
+				}
+			}
+		} else {
+			Point2D sample2 = new Point2D.Double(sample.getX(), sample.getY());
+			if (sample.getX() - distance >= 0) {
+				sample.setLocation(sample.getX() - distance, sample.getY());
+				if(isColliding(sample)) {
+					 return sample2;
+				}
+			}
+			if (sample.getX() + distance <= 1) {
+				sample.setLocation(sample.getX() + distance, sample.getY());
+				if(isColliding(sample)) {
+					 return sample2;
+				}
+			}
+			if (sample.getY() - distance >= 0) {
+				sample.setLocation(sample.getX(), sample.getY() - distance);
+				if(isColliding(sample)) {
+					 return sample2;
+				}
+			}
+			if (sample.getY() + distance <= 1) {
+				sample.setLocation(sample.getX(), sample.getY() + distance);
+				if(isColliding(sample)) {
+					 return sample2;
+				}
+			}
+		}
+		//THIS IS PROBABLY TERRIBLE!
+//		return getSampleNearObstacle(distance);	
+		return null;
+	}
+	
+	private boolean isColliding(Point2D position){
+		for (Obstacle obstacle: obstacles){
+			if(obstacle.getRect().contains(position)){
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	/* ======= Configuration Verification ======= */
+	
+	/**
+	 * Verifies whether a configuration is valid. 
+	 * That is, the polygon formed by the connected chain:
+	 * 		1) The polygon is convex
+	 * 		2) The area of the polygon is at least minArea
+	 * 		3) The direction of the polygon is the same as the initial and goal
+	 * and:
+	 * 		4) The entire configuration is within the [0, 1] bounds
+	 * 		5) The entire configuration doesn't intersect with an obstacle
+	 * 
+	 * @param conf	the ASV configuration to check
+	 */
+	private boolean isValidConfiguration(ASVConfig conf) {
+//		if(tester.isConvex((conf))) {
+//			if(tester.hasEnoughArea(conf)) {
+//				if(isClockwise(conf)) {
+//					if(tester.hasCollision(conf, obstacles)) {
+//						if(inBoundary(conf)) {
+//							return true;
+//						} else {
+//							System.out.println("not in boundary");
+//						}
+//					} else {
+//						System.out.println("collision");
+//					}
+//				} else {
+//					System.out.println("wrong curve orientation");
+//				}
+//			} else {
+//				System.out.println("doesn't meet area");
+//			}
+//			
+//		} else {
+//			System.out.println("not convex");
+//		}
+//		
+//		return false;
+		return  tester.isConvex((conf)) &&
+				tester.hasEnoughArea(conf) &&
+				tester.fitsBounds(conf) && 
+//				isClockwise(conf) == curveClockwise &&
+				!tester.hasCollision(conf, obstacles);
+				
+	}
+	
+	/**
+	 * Returns the area of the polygon formed by connecting the two ends of the 
+	 * given ASV/boom chain
+	 * 
+	 * @param conf	the ASV configuration to calculate the area of
+	 */
+	private double getArea(ASVConfig conf) {
+		List<Point2D> vertices = conf.getASVPositions();
+
+		double area = 0;
+		int last = vertices.size() - 1;
+		
+		for(int i = 0; i < vertices.size(); i++) {
+			Point2D prev = vertices.get(last);
+			Point2D curr = vertices.get(i);
+			area += (prev.getX() + curr.getX()) * (prev.getY() - curr.getY());
+			last = i;
+		}
+		
+		return Math.abs(area/2);
+	}
+
+	/**
+	 * Returns true if the given ASV configuration forms a convex polygon
+	 * 
+	 * @param conf	the ASV configuration to check
+	 */
+	private boolean isConvex(ASVConfig conf) {
+		List<Point2D> vertices = conf.getASVPositions();
+		
+		double sumExternal = 0;
+		
+		for(int i = 0; i < vertices.size(); i++) {
+			// Compare each pair of points
+			Point2D p1 = vertices.get(i);
+			Point2D p2 = vertices.get((i + 1) % vertices.size());
+			Point2D p3 = vertices.get((i + 2) % vertices.size());
+			
+			// Calculate the angle between the two lines
+			Line2D line1 = new Line2D.Double(p1.getX(), p1.getY(), p2.getX(), p2.getY());
+			Line2D line2 = new Line2D.Double(p2.getX(), p2.getY(), p3.getX(), p3.getY());
+
+			double internal = Math.abs(getAngle(line1, line2));
+
+			// Internal angle must be <= 180deg
+			if(Math.abs(internal) > Math.PI) {
+				return false;
+			}
+			
+			// Add to the sum of external angles
+			sumExternal += Math.PI - internal;
+		}
+		
+		// Sum of external angles must be 360deg
+		return sumExternal == (2*Math.PI);
+	}
+	
+	/**
+	 * Returns the angle between two given lines
+	 * 
+	 * @param line1		initial side
+	 * @param line2		terminal side
+	 */
+	private double getAngle(Line2D line1, Line2D line2) {
+		 double angle1 = Math.atan2(line1.getY1() - line1.getY2(), line1.getX1() - line1.getX2());
+		 double angle2 = Math.atan2(line2.getY1() - line2.getY2(),  line2.getX1() - line2.getX2());
+		 double angle = Math.abs((angle2 - angle1));
+		 angle = Math.PI - angle;
+		 return angle;
+	}
+	
+	/**
+	 * Returns true if the given configuration is within the bounds [0, 1]
+	 * 
+	 * @param conf	the ASV configuration to check
+	 */
+	private boolean inBoundary(ASVConfig conf) {
+		for(Point2D p : conf.getASVPositions()) {
+			if(p.getX() < 0 || p.getX() > 1 || p.getY() < 0 || p.getY() > 1) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Finds the 'turn' of the given ASV configuration
+	 * A clockwise configuration has negative internal angles
+	 * A counter-clockwise configuration has positive internal angles
+	 */
+	private boolean isClockwise(ASVConfig conf) {
+		List<Point2D> vertices = conf.getASVPositions();
+		
+		int sum = 0;
+		
+		for(int i = 0; i < vertices.size(); i++) {
+			Point2D p1 = vertices.get(i);
+			Point2D p2 = vertices.get((i + 1) % vertices.size());
+			sum += (p2.getX() - p1.getX()) * (p2.getY() + p1.getY());
+		}
+		return sum >= 0;
+	}
+}
