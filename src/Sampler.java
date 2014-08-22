@@ -1,9 +1,15 @@
 import java.awt.geom.Line2D;
 import java.awt.geom.Point2D;
-import java.util.*;
+import java.io.FileNotFoundException;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
-import problem.*;
-import tester.*;
+import problem.ASVConfig;
+import problem.Obstacle;
+import tester.Tester;
 
 public class Sampler {
 	private int numASVs;						// The number of ASVs for the problem
@@ -12,6 +18,10 @@ public class Sampler {
 	private Random random = new Random();		// Used to generate random positions for states
 	private boolean curveClockwise;				// True if generated states should curve clockwise
 	private List<Obstacle> obstacles;
+	
+	private double MIN_OBSTACLE_SIZE = 0.001;   // The smallest width or height of the obstacles. TODO, get this on input load.
+	private double WEIGHT_RANDOM = 0.1;
+	private double WEIGHT_PASSAGE = 0.4;
 	
 	private Tester tester = new Tester();
 	
@@ -45,7 +55,7 @@ public class Sampler {
 		
 		ASVConfig conf = new ASVConfig(pos);
 		int count = 0;
-		for(int i = 0; i < 100000; i++) {
+		for(int i = 0; i < 10000; i++) {
 			Point2D init = getSampleInPassage(boomLength * 4);
 			while(init == null) { 
 				init = getSampleInPassage(boomLength * 4);
@@ -59,6 +69,68 @@ public class Sampler {
 		}
 		
 		System.out.println(count);
+		generatePath(initial, goal);
+		System.out.println(count);
+	}
+	
+	/** Gets a random sample using weighted sampling strategies.
+	 * @return Point2D sample
+	 */
+	private Point2D getSample(){
+		Random random = new Random();
+		Double randomDouble = random.nextDouble();
+		if (randomDouble > WEIGHT_PASSAGE){
+			return getSampleInPassage(boomLength * 4);
+		}else if(randomDouble < WEIGHT_RANDOM){
+			return getUniformSample();
+		}
+		return getSampleNearObstacle(boomLength);
+	}
+	
+	/**	Finds an ASVConfig that is valid and connects to currentConfig.
+	 * 
+	 * @param currentConfig
+	 * @return a new ASVConfig that connects to currentConfig
+	 */
+	private ASVConfig getNextConfiguration(ASVConfig currentConfig){
+		ASVConfig newConfig = null;
+		while(newConfig == null || !isValidConfiguration(newConfig) || !configurationsConnected(currentConfig, newConfig)){
+			Point2D initPos = getSample();
+			while(initPos == null){
+				initPos = getSample();
+			}
+			newConfig = generateRandomConfiguration(initPos);
+		}
+		return newConfig;
+	}
+	
+	
+	/** Finds a path of ASVConfigs from intial to goal.
+	 * 
+	 * @param initial 	the initial ASVConfig
+	 * @param goal 		the goal ASVConfig
+	 */
+	private void generatePath(ASVConfig initial, ASVConfig goal){
+		List<ASVConfig> states = new ArrayList<ASVConfig>();
+		states.add(initial);
+		while(!configurationsConnected(states.get(states.size()-1), goal)){
+			states.add(getNextConfiguration(states.get(states.size()-1)));
+		}
+		states.add(goal);
+		try {
+			PrintWriter writer = new PrintWriter("testcases/1.txt", "UTF-8");
+			writer.println(states.size() + " 0.6");
+			for(ASVConfig asv: states){
+				writer.println(asv);
+			}
+			writer.close();
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (UnsupportedEncodingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		
 	}
 	
@@ -149,61 +221,84 @@ public class Sampler {
 	private Point2D getSampleNearObstacle(double distance) {
 		Random random = new Random();
 		Point2D sample = new Point2D.Double(random.nextDouble(), random.nextDouble());
+		double angle = 0;
 		if (isColliding(sample)){
-			if (sample.getX() - distance >= 0) {
-				sample.setLocation(sample.getX() - distance, sample.getY());
-				if(!isColliding(sample)) {
-					 return sample;
+			while(angle < Math.PI*2) {
+				double x = sample.getX() + (Math.cos(angle) * distance);
+				double y = sample.getY() + (Math.sin(angle) * distance);
+				if(!isColliding(new Point2D.Double(x, y))){
+					return sample;
 				}
+				angle += Math.PI/2;
 			}
-			if (sample.getX() + distance <= 1) {
-				sample.setLocation(sample.getX() + distance, sample.getY());
-				if(!isColliding(sample)) {
-					 return sample;
+			return null;
+		}else{
+			while(angle < Math.PI*2) {
+				double x = sample.getX() + (Math.cos(angle) * distance);
+				double y = sample.getY() + (Math.sin(angle) * distance);
+				if(isColliding(new Point2D.Double(x, y))){
+					return new Point2D.Double(x, y);
 				}
+				angle += Math.PI/2;
 			}
-			if (sample.getY() - distance >= 0) {
-				sample.setLocation(sample.getX(), sample.getY() - distance);
-				if(!isColliding(sample)) {
-					 return sample;
-				}
-			}
-			if (sample.getY() + distance <= 1) {
-				sample.setLocation(sample.getX(), sample.getY() + distance);
-				if(!isColliding(sample)) {
-					 return sample;
-				}
-			}
-		} else {
-			Point2D sample2 = new Point2D.Double(sample.getX(), sample.getY());
-			if (sample.getX() - distance >= 0) {
-				sample.setLocation(sample.getX() - distance, sample.getY());
-				if(isColliding(sample)) {
-					 return sample2;
-				}
-			}
-			if (sample.getX() + distance <= 1) {
-				sample.setLocation(sample.getX() + distance, sample.getY());
-				if(isColliding(sample)) {
-					 return sample2;
-				}
-			}
-			if (sample.getY() - distance >= 0) {
-				sample.setLocation(sample.getX(), sample.getY() - distance);
-				if(isColliding(sample)) {
-					 return sample2;
-				}
-			}
-			if (sample.getY() + distance <= 1) {
-				sample.setLocation(sample.getX(), sample.getY() + distance);
-				if(isColliding(sample)) {
-					 return sample2;
-				}
-			}
+			return null;
 		}
+		
+//		if (isColliding(sample)){
+//			if (sample.getX() - distance >= 0) {
+//				sample.setLocation(sample.getX() - distance, sample.getY());
+//				if(!isColliding(sample)) {
+//					 return sample;
+//				}
+//			}
+//			if (sample.getX() + distance <= 1) {
+//				sample.setLocation(sample.getX() + distance, sample.getY());
+//				if(!isColliding(sample)) {
+//					 return sample;
+//				}
+//			}
+//			if (sample.getY() - distance >= 0) {
+//				sample.setLocation(sample.getX(), sample.getY() - distance);
+//				if(!isColliding(sample)) {
+//					 return sample;
+//				}
+//			}
+//			if (sample.getY() + distance <= 1) {
+//				sample.setLocation(sample.getX(), sample.getY() + distance);
+//				if(!isColliding(sample)) {
+//					 return sample;
+//				}
+//			}
+//		} else {
+//			Point2D sample2 = new Point2D.Double(sample.getX(), sample.getY());
+//			if (sample.getX() - distance >= 0) {
+//				sample.setLocation(sample.getX() - distance, sample.getY());
+//				if(isColliding(sample)) {
+//					 return sample2;
+//				}
+//			}
+//			if (sample.getX() + distance <= 1) {
+//				sample.setLocation(sample.getX() + distance, sample.getY());
+//				if(isColliding(sample)) {
+//					 return sample2;
+//				}
+//			}
+//			if (sample.getY() - distance >= 0) {
+//				sample.setLocation(sample.getX(), sample.getY() - distance);
+//				if(isColliding(sample)) {
+//					 return sample2;
+//				}
+//			}
+//			if (sample.getY() + distance <= 1) {
+//				sample.setLocation(sample.getX(), sample.getY() + distance);
+//				if(isColliding(sample)) {
+//					 return sample2;
+//				}
+//			}
+//		}
 		//THIS IS PROBABLY TERRIBLE!
 //		return getSampleNearObstacle(distance);	
-		return null;
+//		return null;
 	}
 	
 	private boolean isColliding(Point2D position){
@@ -262,6 +357,38 @@ public class Sampler {
 				
 	}
 	
+	/**
+	 * @param config1 An ASV configuration
+	 * @param config2 An ASV configuration
+	 * @return True if each ASV configuration can be connected in a straight 
+	 * 			line without intersecting any obstacles, false otherwise
+	 */
+	private boolean configurationsConnected(ASVConfig config1, ASVConfig config2){
+		for(int i = 0; i < config1.getASVCount(); i++){
+			if(!pointsConnected(config1.getPosition(i), config2.getPosition(i))){
+				return false;
+			}
+		}
+		return true;
+	}
+	
+	/**
+	 * @param position A Point2D representing an ASV
+	 * @param position2 A Point2D representing an ASV
+	 * @return True if points can connect without intersecting any obstacles,
+	 * 			False otherwise.
+	 */
+	private boolean pointsConnected(Point2D pos1, Point2D pos2) {
+		Point2D midpoint = new Point2D.Double((pos1.getX() +pos2.getX())/2, (pos1.getY() +pos2.getY())/2);
+		if (isColliding(midpoint)){
+			return false;
+		}else if(Math.abs(pos1.getX() - pos2.getX()) < MIN_OBSTACLE_SIZE && Math.abs(pos1.getY() - pos2.getY()) < MIN_OBSTACLE_SIZE){
+			return true;
+		}else{
+			return pointsConnected(pos1, midpoint) && pointsConnected(midpoint, pos2);
+		}
+	}
+
 	/**
 	 * Returns the area of the polygon formed by connecting the two ends of the 
 	 * given ASV/boom chain
