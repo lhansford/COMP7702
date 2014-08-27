@@ -1,12 +1,12 @@
 import java.awt.geom.Line2D;
 import java.awt.geom.Point2D;
+import java.awt.geom.Point2D.Double;
 import java.io.FileNotFoundException;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
+import kdtree.*;
 import problem.ASVConfig;
 import problem.Obstacle;
 import tester.Tester;
@@ -42,35 +42,163 @@ public class Sampler {
 			System.exit(0);
 		}
 		
-		Point2D p1 = new Point2D.Double(0.1, 0.1);
-		Point2D p2 = new Point2D.Double(0.2, 0.1);
-		Point2D p3 = new Point2D.Double(0.3, 0.2);
-		Point2D p4 = new Point2D.Double(0.3, 0.3);
+		generatePath(initial, goal);
+//		Map<ASVConfig, PRMNode> prm = generatePRM(initial, goal);
+//		findPath(prm, initial, goal);
+	}
+	
+	// put initial config in tree
+	// while goal q_new != goal
+	//	get random configuration q
+	//	q' = tree.nn(q)
+	//	q_new = configuration on line qq'
+	//	if line q_new to q' is free and dist(q', q_new) < D
+	//		add q_new as child of q'
+	
+	private void buildRRT(ASVConfig initial, ASVConfig goal) {
+		KDTree tree = new KDTree(2*numASVs);
+		tree.insert(initial.getPositions(), initial);
 		
-		List<Point2D> pos = new ArrayList<Point2D>();
-		pos.add(p1);
-		pos.add(p2);
-		pos.add(p3);
-		pos.add(p4);
-		
-		ASVConfig conf = new ASVConfig(pos);
-		int count = 0;
-		for(int i = 0; i < 10000; i++) {
-			Point2D init = getSampleInPassage(boomLength * 4);
-			while(init == null) { 
-				init = getSampleInPassage(boomLength * 4);
+		while(true) {
+			// Get random config q
+			ASVConfig q;
+			Point2D initPos = getSample();
+			while(initPos == null) {
+				initPos = getSample();
 			}
-			ASVConfig c = generateRandomConfiguration(init);
-			if(isValidConfiguration(c)) {
-//				System.out.println(c);
-				count++;
-//				System.err.println("FOUND!");
+			q = generateRandomConfiguration(initPos);
+			
+			// Get q'
+			ASVConfig qPrime = (ASVConfig) tree.nearest(q.getPositions());
+			
+			// Get qNew on line from q to q'
+			List<Point2D> qPositions = q.getASVPositions();
+			List<Point2D> qPrimePositions = qPrime.getASVPositions();
+			
+			double blend = Math.random() * 0.001;
+			
+			List<Point2D> qNewPositions = new ArrayList<Point2D>();
+			
+			for(int i = 0; i < qPositions.size(); i++) {
+				Point2D qASV = qPositions.get(i);
+				Point2D qPrimeASV = qPrimePositions.get(i);
+				
+				double x = qPrimeASV.getX() + blend * (qASV.getX() - qPrimeASV.getX());
+				double y = qPrimeASV.getY() + blend * (qASV.getY() - qPrimeASV.getY());
+				
+				Point2D p = new Point2D.Double(x, y);
+				
+				qNewPositions.add(p);
+				
+				
+			}
+			
+			
+			
+		}
+	}
+	
+	private Map<ASVConfig, PRMNode> generatePRM(ASVConfig initial, ASVConfig goal) {
+		Map<ASVConfig, PRMNode> prm = new HashMap<ASVConfig, PRMNode>();
+
+		prm.put(initial, new PRMNode(initial));
+		prm.put(goal, new PRMNode(goal));
+		
+		int con = 0;
+		int maxConnections = 10;
+		List<Point2D> points;
+		PRMVisualiser visualHelper = new PRMVisualiser();
+		
+		visualHelper.addPoint(initial.getASVPositions().get(1));
+		visualHelper.addPoint(goal.getASVPositions().get(1));
+		
+		while(prm.size() < 350) {
+			ASVConfig conf = null;
+			while(conf == null || !isValidConfiguration(conf)) {
+				Point2D initPos = getSample();
+				while(initPos == null) {
+					initPos = getSample();
+				}
+				conf = generateRandomConfiguration(initPos);
+			}
+			
+			
+			// We now have a valid configuration
+			
+			// Add it to roadmap
+			PRMNode node = new PRMNode(conf);
+			prm.put(conf, node);
+			int connections = 0;
+			
+			// Now we can generate candidate neighbours for the configuration
+			// Find all nodes n already in the roadmap such that n != node and dist(n, node) <= minDist
+			for(Iterator it = prm.values().iterator(); it.hasNext(); ) {
+				// Current node of roadmap being processed
+				PRMNode n = (PRMNode) it.next();
+				
+				// Check if it is close enough
+				if(connections <= maxConnections && n != node && n.distanceTo(node) <= boomLength * 3) {
+					// Check that the line between the two configurations is free
+					if(configurationsConnected(conf, n.getConf())) {
+						// Line is in free space, add connections
+						con += 2;
+						connections++;
+						node.addConnection(n);
+						n.addConnection(node);
+						
+						// Visualiser stuff:
+						// Get points of ASV1
+						Point2D p1 = conf.getASVPositions().get(0);
+						Point2D p2 = n.getConf().getASVPositions().get(0);
+						points = new ArrayList<Point2D>();
+						points.add(p1); points.add(p2);
+						visualHelper.addConnection(points, "");
+						
+//						if(n.getConf() == initial || conf == initial) {
+//							System.err.println("Connected start node");
+//							visualHelper.addConnection(points, "initial");
+//						}
+//						if(n.getConf() == goal || conf == goal) {
+//							System.err.println("Connected goal node");
+//							visualHelper.addConnection(points, "goal");
+//						}
+					}
+				}
+			}
+			
+			if(connections == 0) {
+//				System.err.println(conf + " has no connections");
 			}
 		}
 		
-		System.out.println(count);
-		generatePath(initial, goal);
-		System.out.println(count);
+		for(Iterator it = prm.values().iterator(); it.hasNext(); ) {
+			PRMNode n = (PRMNode) it.next();
+			System.out.println(n.getConf());
+		}
+		
+		System.out.println("Connections: " + con);
+		
+		
+		
+		visualHelper.addRectangles(obstacles);
+		visualHelper.repaint();
+		
+		return prm;
+		
+	}
+	
+	public void findPath(Map<ASVConfig, PRMNode> prm, ASVConfig initial, ASVConfig goal) {
+//		// First try to connect initial and goal config to the prm?
+//		for(Iterator it = prm.values().iterator(); it.hasNext(); ) {
+//			PRMNode n = (PRMNode) it.next();
+//			
+//			// Find a connection with line in free space
+//			if(configurationsConnected(initial, n.getConf())) {
+//				
+//			}
+//		}
+		AStarSearch search = new AStarSearch(prm.get(initial), prm.get(goal));
+		search.search();
 	}
 	
 	/** Gets a random sample using weighted sampling strategies.
@@ -80,7 +208,7 @@ public class Sampler {
 		Random random = new Random();
 		Double randomDouble = random.nextDouble();
 		if (randomDouble > WEIGHT_PASSAGE){
-			return getSampleInPassage(boomLength * 4);
+			return getSampleInPassage(boomLength * 5);
 		}else if(randomDouble < WEIGHT_RANDOM){
 			return getUniformSample();
 		}
@@ -113,10 +241,20 @@ public class Sampler {
 	private void generatePath(ASVConfig initial, ASVConfig goal){
 		List<ASVConfig> states = new ArrayList<ASVConfig>();
 		states.add(initial);
+		List<Point2D> points;
+		PRMVisualiser visualHelper = new PRMVisualiser();
+		
 		while(!configurationsConnected(states.get(states.size()-1), goal)){
 			states.add(getNextConfiguration(states.get(states.size()-1)));
+			Point2D p1 = states.get(states.size() - 1).getASVPositions().get(0);
+			Point2D p2 = states.get(states.size() - 2).getASVPositions().get(0);
+			points = new ArrayList<Point2D>();
+			points.add(p1); points.add(p2);
+			visualHelper.addConnection(points, "");
 		}
 		states.add(goal);
+		visualHelper.addRectangles(obstacles);
+		visualHelper.repaint();
 		try {
 			PrintWriter writer = new PrintWriter("testcases/1.txt", "UTF-8");
 			writer.println(states.size() + " 0.6");

@@ -154,4 +154,17 @@ public class ASVConfig {
 	public List<Point2D> getASVPositions() {
 		return new ArrayList<Point2D>(asvPositions);
 	}
+	
+	public double[] getPositions() {
+		double[] pos = new double[2*asvPositions.size()];
+		
+		int i = 0;
+		for(Point2D point : asvPositions) {
+			pos[i] = point.getX();
+			pos[i+1] = point.getY();
+			i = i + 2;
+		}
+		
+		return pos;
+	}
 }

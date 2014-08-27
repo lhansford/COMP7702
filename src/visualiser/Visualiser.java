@@ -439,6 +439,7 @@ public class Visualiser {
 			vp.getProblemSetup().loadSolution(f.getPath());
 			setHasSolution(true);
 		} catch (IOException e1) {
+			System.err.println(e1.getMessage());
 			showFileError(f);
 			setHasSolution(false);
 		}

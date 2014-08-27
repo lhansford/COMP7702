@@ -128,7 +128,7 @@ public class ProblemSpec {
 			s.close();
 
 			path = new ArrayList<ASVConfig>();
-			for (int i = 0; i < pathLength; i++) {
+			for (int i = 0; i < pathLength - 1; i++) {
 				line = input.readLine();
 				lineNo++;
 				path.add(new ASVConfig(asvCount, line));
