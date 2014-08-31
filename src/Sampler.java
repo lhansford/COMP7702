@@ -206,7 +206,7 @@ public class Sampler {
 	 */
 	private Point2D getSample(){
 		Random random = new Random();
-		Double randomDouble = random.nextDouble();
+		double randomDouble = random.nextDouble();
 		if (randomDouble > WEIGHT_PASSAGE){
 			return getSampleInPassage(boomLength * 5);
 		}else if(randomDouble < WEIGHT_RANDOM){

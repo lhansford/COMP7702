@@ -10,6 +10,7 @@ import problem.*;
  */
 public class RiverCleaner {
 	private static final String DEFAULT_TESTCASE = "testcases/3ASV-fixed-x4.txt";
+//	private static final String DEFAULT_TESTCASE = "testcases/7-ASV-x6.txt";
 	
 	private static final double BOOM_LENGTH = 0.05;
 	
